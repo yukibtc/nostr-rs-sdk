@@ -764,6 +764,26 @@ impl Client {
     }
 
     #[cfg(feature = "sqlite")]
+    pub async fn req_feed(&self, since: Option<u64>, until: Option<u64>) -> Result<(), Error> {
+        let store = self.store()?;
+        let mut filter = SubscriptionFilter::new()
+            .kinds(vec![
+                Kind::Base(KindBase::TextNote),
+                Kind::Base(KindBase::Boost),
+                Kind::Base(KindBase::Reaction),
+            ])
+            .authors(store.get_contacts_pubkeys()?);
+        if let Some(since) = since {
+            filter = filter.since(since);
+        }
+        if let Some(until) = until {
+            filter = filter.until(until);
+        }
+        self.req_events_of(vec![filter]);
+        Ok(())
+    }
+
+    #[cfg(feature = "sqlite")]
     pub async fn sync(&self) -> Result<(), Error> {
         use crate::thread;
         use nostr::util::time;
@@ -778,9 +798,9 @@ impl Client {
                 .kind(Kind::Base(KindBase::ContactList))
                 .limit(1);
 
-            let dm_filters = SubscriptionFilter::new()
-                .pubkey(my_public_key)
-                .kind(Kind::Base(KindBase::EncryptedDirectMessage));
+            /* let dm_filters = SubscriptionFilter::new()
+            .pubkey(my_public_key)
+            .kind(Kind::Base(KindBase::EncryptedDirectMessage)); */
 
             let mut contacts_metadata =
                 SubscriptionFilter::new().kind(Kind::Base(KindBase::Metadata));
@@ -798,11 +818,11 @@ impl Client {
                         let new_metadata_filter =
                             contacts_metadata.clone().authors(pubkeys.clone());
                         let new_feed_filters =
-                            feed_filters.clone().authors(pubkeys).since(now - 86400);
+                        feed_filters.clone().authors(pubkeys).since(now - 43200);
                         match client
                             .subscribe(vec![
                                 contact_filters.clone(),
-                                dm_filters.clone(),
+                                //dm_filters.clone(),
                                 new_metadata_filter.clone(),
                                 new_feed_filters.clone(),
                             ])

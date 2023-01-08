@@ -146,7 +146,40 @@ impl Store {
         Ok(())
     }
 
-    pub fn get_feed(&self, limit: usize, page: usize) -> Result<Vec<Event>, Error> {
+    pub fn get_feed(&self, since: Option<u64>, until: Option<u64>) -> Result<Vec<Event>, Error> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM event WHERE kind IN (?, ?) AND created_at >= ? AND created_at < ? ORDER BY created_at DESC")?;
+        let mut rows = stmt.query([
+            1,
+            6,
+            since.unwrap_or_default(),
+            until.unwrap_or(i64::MAX as u64),
+        ])?;
+
+        let mut events = Vec::new();
+
+        while let Ok(Some(row)) = rows.next() {
+            let id: String = row.get(0)?;
+            let pubkey: String = row.get(1)?;
+            let tags: Vec<u8> = row.get(4)?;
+            let sig: String = row.get(6)?;
+            events.push(Event {
+                id: Sha256Hash::from_str(&id)?,
+                pubkey: XOnlyPublicKey::from_str(&pubkey)?,
+                created_at: row.get(2)?,
+                kind: Kind::Custom(row.get(3)?),
+                tags: self.deserialize(&tags)?,
+                content: row.get(5)?,
+                ots: None,
+                sig: Signature::from_str(&sig)?,
+            })
+        }
+
+        Ok(events)
+    }
+
+    pub fn get_feed_with_limit(&self, limit: usize, page: usize) -> Result<Vec<Event>, Error> {
         let conn = self.pool.get()?;
         let mut stmt = conn
             .prepare("SELECT * FROM event WHERE kind IN (?, ?) ORDER BY created_at DESC LIMIT ?")?;
